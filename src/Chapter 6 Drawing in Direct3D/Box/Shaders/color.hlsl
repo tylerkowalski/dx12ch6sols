@@ -40,7 +40,16 @@ VertexOut VS(VertexIn vin)
 
 float4 PS(VertexOut pin) : SV_Target
 {
-    return pin.Color;
+    const float pi = 3.14159;
+ //	Oscillate	a	value	in	[0,1]	over	time	using	a
+ //sine function.
+    float s = 0.5f * sin(2 * gTime - 0.25f * pi) + 0.5f;
+ //	Linearly	interpolate	between	pin.Color	and
+//  gPulseColor based
+ // on
+//	parameter	s.	
+    float4 c = lerp(pin.Color, float4(0.08784313725f, 0.39215686274f, 0.03058823529f, 0.0f), s);
+    return c;
 }
 
 
