@@ -50,7 +50,7 @@ private:
 	void BuildConstantBuffers();
     void BuildRootSignature();
     void BuildShadersAndInputLayout();
-    void BuildBoxGeometry();
+    void BuildPyramidGeometry();
     void BuildPSO();
 
 private:
@@ -60,7 +60,7 @@ private:
 
     std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
 
-	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+	std::unique_ptr<MeshGeometry> mPyGeo = nullptr;
 
     ComPtr<ID3DBlob> mvsByteCode = nullptr;
     ComPtr<ID3DBlob> mpsByteCode = nullptr;
@@ -124,7 +124,7 @@ bool BoxApp::Initialize()
 	BuildConstantBuffers();
     BuildRootSignature();
     BuildShadersAndInputLayout();
-    BuildBoxGeometry();
+    BuildPyramidGeometry();
     BuildPSO();
 
     // Execute the initialization commands.
@@ -201,14 +201,14 @@ void BoxApp::Draw(const GameTimer& gt)
 
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-	mCommandList->IASetVertexBuffers(0, 1, &mBoxGeo->VertexBufferView());
-	mCommandList->IASetIndexBuffer(&mBoxGeo->IndexBufferView());
+	mCommandList->IASetVertexBuffers(0, 1, &mPyGeo->VertexBufferView());
+	mCommandList->IASetIndexBuffer(&mPyGeo->IndexBufferView());
     mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     
     mCommandList->SetGraphicsRootDescriptorTable(0, mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 
     mCommandList->DrawIndexedInstanced(
-		mBoxGeo->DrawArgs["box"].IndexCount, 
+		mPyGeo->DrawArgs["box"].IndexCount, 
 		1, 0, 0, 0);
 	
     // Indicate a state transition on the resource usage.
@@ -361,7 +361,7 @@ void BoxApp::BuildShadersAndInputLayout()
     };
 }
 
-void BoxApp::BuildBoxGeometry()
+void BoxApp::BuildPyramidGeometry()
 {
     std::array<Vertex, 8> vertices =
     {
@@ -371,66 +371,52 @@ void BoxApp::BuildBoxGeometry()
 		Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
 		Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
 		Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
-		Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) }),
+		Vertex({ XMFLOAT3(0.0f, +1.0f, +0.0f), XMFLOAT4(Colors::Cyan) }),
 		Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
     };
 
-	std::array<std::uint16_t, 36> indices =
+	std::array<std::uint16_t, 18> indices =
 	{
-		// front face
-		0, 1, 2,
-		0, 2, 3,
-
-		// back face
-		4, 6, 5,
-		4, 7, 6,
-
-		// left face
-		4, 5, 1,
-		4, 1, 0,
-
-		// right face
-		3, 2, 6,
-		3, 6, 7,
-
-		// top face
-		1, 5, 6,
-		1, 6, 2,
 
 		// bottom face
 		4, 0, 3,
-		4, 3, 7
+		4, 3, 7,
+        // other faces
+        4, 6, 0,
+        0, 6, 3,
+        3, 6, 7,
+        7, 6, 4,
 	};
 
     const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
-	mBoxGeo = std::make_unique<MeshGeometry>();
-	mBoxGeo->Name = "boxGeo";
+	mPyGeo = std::make_unique<MeshGeometry>();
+	mPyGeo->Name = "boxGeo";
 
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo->VertexBufferCPU));
-	CopyMemory(mBoxGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
+	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mPyGeo->VertexBufferCPU));
+	CopyMemory(mPyGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
 
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo->IndexBufferCPU));
-	CopyMemory(mBoxGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
+	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mPyGeo->IndexBufferCPU));
+	CopyMemory(mPyGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
-	mBoxGeo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), vertices.data(), vbByteSize, mBoxGeo->VertexBufferUploader);
+	mPyGeo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), vertices.data(), vbByteSize, mPyGeo->VertexBufferUploader);
 
-	mBoxGeo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), indices.data(), ibByteSize, mBoxGeo->IndexBufferUploader);
+	mPyGeo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
+		mCommandList.Get(), indices.data(), ibByteSize, mPyGeo->IndexBufferUploader);
 
-	mBoxGeo->VertexByteStride = sizeof(Vertex);
-	mBoxGeo->VertexBufferByteSize = vbByteSize;
-	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-	mBoxGeo->IndexBufferByteSize = ibByteSize;
+	mPyGeo->VertexByteStride = sizeof(Vertex);
+	mPyGeo->VertexBufferByteSize = vbByteSize;
+	mPyGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
+	mPyGeo->IndexBufferByteSize = ibByteSize;
 
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
 
-	mBoxGeo->DrawArgs["box"] = submesh;
+	mPyGeo->DrawArgs["box"] = submesh;
 }
 
 void BoxApp::BuildPSO()
