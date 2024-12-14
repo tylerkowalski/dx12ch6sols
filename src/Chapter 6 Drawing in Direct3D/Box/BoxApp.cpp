@@ -363,14 +363,11 @@ void BoxApp::BuildShadersAndInputLayout()
 
 void BoxApp::BuildPyramidGeometry()
 {
-    std::array<Vertex, 8> vertices =
+    std::array<Vertex, 5> vertices =
     {
         Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
-		Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Black) }),
-		Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Red) }),
 		Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
 		Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
-		Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
 		Vertex({ XMFLOAT3(0.0f, +1.0f, +0.0f), XMFLOAT4(Colors::Cyan) }),
 		Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
     };
@@ -379,13 +376,13 @@ void BoxApp::BuildPyramidGeometry()
 	{
 
 		// bottom face
-		4, 0, 3,
-		4, 3, 7,
+		2, 0, 1,
+		2, 1, 4,
         // other faces
-        4, 6, 0,
-        0, 6, 3,
-        3, 6, 7,
-        7, 6, 4,
+        2, 3, 0,
+        0, 3, 1,
+        1, 3, 4,
+        4, 3, 2,
 	};
 
     const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
