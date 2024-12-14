@@ -50,7 +50,7 @@ private:
 	void BuildConstantBuffers();
     void BuildRootSignature();
     void BuildShadersAndInputLayout();
-    void BuildPyramidGeometry();
+    void BuildGeometry();
     void BuildPSO();
 
 private:
@@ -124,7 +124,7 @@ bool BoxApp::Initialize()
 	BuildConstantBuffers();
     BuildRootSignature();
     BuildShadersAndInputLayout();
-    BuildPyramidGeometry();
+    BuildGeometry();
     BuildPSO();
 
     // Execute the initialization commands.
@@ -170,6 +170,14 @@ void BoxApp::Update(const GameTimer& gt)
 	ObjectConstants objConstants;
     XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj));
     mObjectCB->CopyData(0, objConstants);
+
+    // add a translation to the world matrix for the second object?
+    world = XMMatrixTranslation(2.0, 2.0, 2.0);
+    world = XMMatrixRotationZ(MathHelper::Pi / 4) * world;
+    worldViewProj = world * view * proj;
+    XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj));
+    mObjectCB->CopyData(1, objConstants);
+
 }
 
 void BoxApp::Draw(const GameTimer& gt)
@@ -205,11 +213,19 @@ void BoxApp::Draw(const GameTimer& gt)
 	mCommandList->IASetIndexBuffer(&mPyGeo->IndexBufferView());
     mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     
-    mCommandList->SetGraphicsRootDescriptorTable(0, mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = mCbvHeap->GetGPUDescriptorHandleForHeapStart();
+    mCommandList->SetGraphicsRootDescriptorTable(0, gpuHandle);
 
     mCommandList->DrawIndexedInstanced(
 		mPyGeo->DrawArgs["box"].IndexCount, 
-		1, 0, 0, 0);
+		1, mPyGeo->DrawArgs["box"].StartIndexLocation, mPyGeo->DrawArgs["box"].BaseVertexLocation, 0);
+
+    // add a different transform matrix to constant buffer, then bind a different view!
+    gpuHandle.ptr += mCbvSrvUavDescriptorSize;
+    mCommandList->SetGraphicsRootDescriptorTable(0, gpuHandle);
+    mCommandList->DrawIndexedInstanced(
+        mPyGeo->DrawArgs["pyramid"].IndexCount,
+        1, mPyGeo->DrawArgs["pyramid"].StartIndexLocation, mPyGeo->DrawArgs["pyramid"].BaseVertexLocation, 0);
 	
     // Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -280,7 +296,7 @@ void BoxApp::OnMouseMove(WPARAM btnState, int x, int y)
 void BoxApp::BuildDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-    cbvHeapDesc.NumDescriptors = 1;
+    cbvHeapDesc.NumDescriptors = 2;
     cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
@@ -290,7 +306,7 @@ void BoxApp::BuildDescriptorHeaps()
 
 void BoxApp::BuildConstantBuffers()
 {
-	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), 1, true);
+	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), 2, true);
 
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
@@ -303,9 +319,23 @@ void BoxApp::BuildConstantBuffers()
 	cbvDesc.BufferLocation = cbAddress;
 	cbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = mCbvHeap->GetCPUDescriptorHandleForHeapStart();
+
 	md3dDevice->CreateConstantBufferView(
 		&cbvDesc,
-		mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+		cpuHandle);
+
+    // create a second constant buffer view for different object
+    boxCBufIndex = 1;
+    cbAddress += boxCBufIndex * objCBByteSize;
+    cpuHandle.ptr += mCbvSrvUavDescriptorSize;
+
+    cbvDesc.BufferLocation = cbAddress;
+    cbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+
+    md3dDevice->CreateConstantBufferView(
+        &cbvDesc,
+        cpuHandle);
 }
 
 void BoxApp::BuildRootSignature()
@@ -361,20 +391,32 @@ void BoxApp::BuildShadersAndInputLayout()
     };
 }
 
-void BoxApp::BuildPyramidGeometry()
+void BoxApp::BuildGeometry()
 {
-    std::array<Vertex, 5> vertices =
+    std::array<Vertex, 13> vertices =
     {
+        // PYRAMID VERTICES
         Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
 		Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
 		Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
 		Vertex({ XMFLOAT3(0.0f, +1.0f, +0.0f), XMFLOAT4(Colors::Cyan) }),
-		Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
+		Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) }),
+
+        // BOX VERTICES
+        Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
+        Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Black) }),
+        Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Red) }),
+        Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
+        Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
+        Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
+        Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) }),
+        Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
     };
 
-	std::array<std::uint16_t, 18> indices =
+	std::array<std::uint16_t, 54> indices =
 	{
-
+        //PYRAMID:
+        
 		// bottom face
 		2, 0, 1,
 		2, 1, 4,
@@ -383,13 +425,38 @@ void BoxApp::BuildPyramidGeometry()
         0, 3, 1,
         1, 3, 4,
         4, 3, 2,
+
+        // BOX:
+        // front face
+        0, 1, 2,
+        0, 2, 3,
+
+        // back face
+        4, 6, 5,
+        4, 7, 6,
+
+        // left face
+        4, 5, 1,
+        4, 1, 0,
+
+        // right face
+        3, 2, 6,
+        3, 6, 7,
+
+        // top face
+        1, 5, 6,
+        1, 6, 2,
+
+        // bottom face
+        4, 0, 3,
+        4, 3, 7
 	};
 
     const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
 	mPyGeo = std::make_unique<MeshGeometry>();
-	mPyGeo->Name = "boxGeo";
+	mPyGeo->Name = "geometry";
 
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mPyGeo->VertexBufferCPU));
 	CopyMemory(mPyGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
@@ -409,11 +476,16 @@ void BoxApp::BuildPyramidGeometry()
 	mPyGeo->IndexBufferByteSize = ibByteSize;
 
 	SubmeshGeometry submesh;
-	submesh.IndexCount = (UINT)indices.size();
+    submesh.IndexCount = 18;
 	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
 
-	mPyGeo->DrawArgs["box"] = submesh;
+	mPyGeo->DrawArgs["pyramid"] = submesh;
+
+    submesh.IndexCount = 36;
+    submesh.StartIndexLocation = 18;
+    submesh.BaseVertexLocation = 5;
+    mPyGeo->DrawArgs["box"] = submesh;
 }
 
 void BoxApp::BuildPSO()
