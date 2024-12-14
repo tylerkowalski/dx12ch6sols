@@ -425,14 +425,44 @@ bool D3DApp::InitDirect3D()
 
 	ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Try to create hardware device.
-	HRESULT hardwareResult = D3D12CreateDevice(
-		nullptr,             // default adapter
-		D3D_FEATURE_LEVEL_12_0,
-		IID_PPV_ARGS(&md3dDevice));
+	// try to use nvidia hardware if possible (have dedicated nvidia gpu)
+	const int NVIDIA_VENDOR_ID = 0x10DE;
+	HRESULT nvidiaResult = E_FAIL;
+	UINT i = 0;
+	IDXGIAdapter* adapter = nullptr;
+	std::vector<IDXGIAdapter*> adapterList;
+	while (mdxgiFactory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND)
+	{
+		DXGI_ADAPTER_DESC desc;
+		adapter->GetDesc(&desc);
+
+		adapterList.push_back(adapter);
+		++i;
+		
+		if (desc.VendorId == NVIDIA_VENDOR_ID) {
+			// Try to create nvidia device.
+				nvidiaResult = D3D12CreateDevice(
+				adapter,             
+				D3D_FEATURE_LEVEL_12_0,
+				IID_PPV_ARGS(&md3dDevice));
+				break;
+		}
+	}
+
+	for (size_t i = 0; i < adapterList.size(); ++i)
+	{
+		ReleaseCom(adapterList[i]);
+	}
+
+	// DEPRECATED:
+	//// Try to create hardware device.
+	//HRESULT hardwareResult = D3D12CreateDevice(
+	//	nullptr,             // default adapter
+	//	D3D_FEATURE_LEVEL_12_0,
+	//	IID_PPV_ARGS(&md3dDevice));
 
 	// Fallback to WARP device.
-	if(FAILED(hardwareResult))
+	if(FAILED(nvidiaResult))
 	{
 		ComPtr<IDXGIAdapter> pWarpAdapter;
 		ThrowIfFailed(mdxgiFactory->EnumWarpAdapter(IID_PPV_ARGS(&pWarpAdapter)));
